@@ -4,8 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Financeiro - Pessoal</title>
-<meta name="theme-color" content="#F5F5F7">
-<meta name="color-scheme" content="light dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Pessoal">
@@ -29,7 +27,13 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--
 </style>
 <script>
 /* tema escolhido no app (guardado aqui), aplicado antes de pintar para o topo não piscar */
-(function () { try { var t = localStorage.getItem('fp_casca_tema'); if (t === 'escuro' || (t !== 'claro' && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.className = 'escuro'; } catch (e) { } })();
+(function () {
+  var esc = false;
+  try { var t = localStorage.getItem('fp_casca_tema'); esc = t === 'escuro' || (t !== 'claro' && matchMedia('(prefers-color-scheme: dark)').matches); } catch (e) { }
+  if (esc) document.documentElement.className = 'escuro';
+  // a cor do topo já nasce certa: o iPhone lê estas duas marcas ao abrir o app
+  document.write('<meta name="theme-color" content="' + (esc ? '#0B0C0E' : '#F5F5F7') + '"><meta name="color-scheme" content="' + (esc ? 'dark' : 'light') + '">');
+})();
 </script>
 </head>
 <body>
@@ -44,7 +48,12 @@ function ler(k) { try { return localStorage.getItem(k); } catch (e) { return nul
 function gravar(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { } }
 function pintar() {
   var escuro = document.documentElement.className === 'escuro', cor = escuro ? '#0B0C0E' : '#F5F5F7';
-  document.querySelector('meta[name=theme-color]').content = cor;
+  // trocar a marca inteira (e não só o valor): é o que faz o iPhone repintar o topo na hora
+  Array.prototype.forEach.call(document.querySelectorAll('meta[name=theme-color],meta[name=color-scheme]'), function (m) { m.remove(); });
+  var a = document.createElement('meta'); a.name = 'theme-color'; a.content = cor; document.head.appendChild(a);
+  var b = document.createElement('meta'); b.name = 'color-scheme'; b.content = escuro ? 'dark' : 'light'; document.head.appendChild(b);
+  document.documentElement.style.colorScheme = escuro ? 'dark' : 'light';
+  document.body && (document.body.style.backgroundColor = cor);
 }
 pintar();
 $('app').src = APP;
