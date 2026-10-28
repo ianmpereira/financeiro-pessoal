@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Financeiro - Pessoal</title>
-<meta name="theme-color" content="#F3F4F7">
+<meta name="theme-color" content="#F5F5F7">
+<meta name="color-scheme" content="light dark">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Pessoal">
@@ -16,15 +17,20 @@
 <link rel="icon" href="favicon-32.png" sizes="32x32">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
-/* Casca do app pessoal (separada da casca do Financeiro da loja): só a moldura. Os dados ficam no app, protegidos pelo aparelho autorizado. */
-:root{--bg:#F3F4F7;--text:#1B1B2F;--text-2:#6B6B80;--surface:#fff;--line:#E7E7EF}
-@media (prefers-color-scheme:dark){:root{--bg:#0E0F14;--text:#ECECF3;--text-2:#A3A3B5;--surface:#171920;--line:#2A2C37}}
-html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overscroll-behavior:none}
-#app{position:fixed;inset:0;width:100%;height:100%;border:0;background:var(--bg)}
+/* Casca do app pessoal: só a moldura. Guarda a chave do aparelho (aqui o iPhone não apaga) e pinta a faixa
+   de cima (relógio, Wi-Fi) da mesma cor do app, clara ou escura. */
+:root{--bg:#F5F5F7;--text:#1D1D1F;--text-2:#6E6E73;--surface:#fff;--line:rgba(60,60,67,.12)}
+:root.escuro{--bg:#0B0C0E;--text:#F2F2F3;--text-2:#A1A1A8;--surface:#16181B;--line:rgba(255,255,255,.08)}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overscroll-behavior:none;transition:background-color .25s ease}
+#app{position:fixed;inset:0;width:100%;height:100%;border:0;padding-top:env(safe-area-inset-top);box-sizing:border-box;background:var(--bg)}
 #aviso{position:fixed;left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom));max-width:440px;margin:0 auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;gap:12px;align-items:center;box-shadow:0 12px 32px rgba(0,0,0,.14)}
 #aviso[hidden]{display:none}#aviso .t{flex:1}#aviso small{display:block;color:var(--text-2)}
 #aviso button{border:0;border-radius:10px;height:40px;padding:0 14px;font:inherit;font-weight:600;background:var(--text);color:var(--bg)}
 </style>
+<script>
+/* tema escolhido no app (guardado aqui), aplicado antes de pintar para o topo não piscar */
+(function () { try { var t = localStorage.getItem('fp_casca_tema'); if (t === 'escuro' || (t !== 'claro' && matchMedia('(prefers-color-scheme: dark)').matches)) document.documentElement.className = 'escuro'; } catch (e) { } })();
+</script>
 </head>
 <body>
 <iframe id="app" title="Financeiro - Pessoal" allow="clipboard-write" referrerpolicy="no-referrer"></iframe>
@@ -33,16 +39,38 @@ html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--
 (function () {
 'use strict';
 var APP = 'https://script.google.com/macros/s/AKfycbwXlDVTNh9iBP7nC5SS9ehbR731WGr6YAFkXP5DRJfDPP3PC4CqrjNvcB7w5oVxBt8/exec';
-document.getElementById('app').src = APP;
+var $ = function (id) { return document.getElementById(id); };
+function ler(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function gravar(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { } }
+function pintar() {
+  var escuro = document.documentElement.className === 'escuro', cor = escuro ? '#0B0C0E' : '#F5F5F7';
+  document.querySelector('meta[name=theme-color]').content = cor;
+}
+pintar();
+$('app').src = APP;
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () { });
-var respondeu = false;
+// altura da barrinha do iPhone: o app dentro da moldura não enxerga, então a casca mede e avisa
+function insetBaixo() { var e = document.createElement('div'); e.style.cssText = 'position:fixed;bottom:0;height:0;padding-bottom:env(safe-area-inset-bottom);visibility:hidden'; document.body.appendChild(e); var v = parseFloat(getComputedStyle(e).paddingBottom) || 0; e.remove(); return v; }
+var respondeu = false, janela = null, origem = null;
 window.addEventListener('message', function (ev) {
-  if (/^https:\/\/[a-z0-9.-]+\.googleusercontent\.com$/.test(ev.origin) && ev.data && ev.data.fp === 1) respondeu = true;
+  var m = ev.data;
+  if (!/^https:\/\/[a-z0-9.-]+\.googleusercontent\.com$/.test(ev.origin) || !m || m.fp !== 1) return;
+  try { if (!ev.source || ev.source.top !== window) return; } catch (e) { return; }   // só o app que está DENTRO desta moldura
+  respondeu = true; $('aviso').hidden = true; janela = ev.source; origem = ev.origin;
+  if (m.tipo === 'app-pronto') {
+    janela.postMessage({ fp: 1, tipo: 'casca', inset: { b: insetBaixo() }, chave: ler('fp_casca_chave') }, origem);
+  } else if (m.tipo === 'sessao') {
+    if (m.token === null) gravar('fp_casca_chave', null);
+    else if (typeof m.token === 'string' && m.token.length < 4000) gravar('fp_casca_chave', m.token);
+  } else if (m.tipo === 'tema') {
+    gravar('fp_casca_tema', m.pref === 'escuro' || m.pref === 'claro' ? m.pref : 'auto');
+    document.documentElement.className = m.escuro ? 'escuro' : ''; pintar();
+  }
 });
 setTimeout(function () {
   if (respondeu) return;
-  document.getElementById('aviso').hidden = false;
-  document.getElementById('abrir').onclick = function () { location.href = APP; };
+  $('aviso').hidden = false;
+  $('abrir').onclick = function () { location.href = APP; };
 }, 15000);
 })();
 </script>
